@@ -1,21 +1,14 @@
-import enum
-import json
-import math
-from re import T
-from statistics import median
-import requests
-import copy
+import copy, requests, json,math
 from datetime import datetime, timedelta,date
-from pprint import pprint
 
-
+remove_weekdays = False
+weight_races = True
 weight = .125
 outlier_sensitivity = 15
-start_date = "01-09-2022"
-#start_date = "19-08-2022"
-
-
-
+remove_dates = []
+#remove_dates = ["13-09-2022","27-09-2022"]
+start_date = "01-09-2022" # September 1st (Saline)
+#start_date = "19-08-2022" # August 19th (Lamp Lighter)
 
 with open("athleteData.txt","r") as f:
     athlete_data = json.loads(f.read())
@@ -24,6 +17,7 @@ team_data = {}
 
 def roundHundredths(value):
     return round(value*100) /100
+
 def bubbleSort(data):
     n = len(data)
     new = copy.deepcopy(data)
@@ -32,50 +26,44 @@ def bubbleSort(data):
             if(new[x] > new[x+1]):
                 new[x],new[x+1] = new[x+1],new[x]
     return new
+
 def average(data):
     if(len(data) == 0):
         return 0
     return roundHundredths(sum(data) / len(data))
+
 def ratingToSeconds(rating):
     return 1560 - (3 * rating)
+
 def secondsToTime(sec):
     time = str(timedelta(seconds=sec)).split(":")
     return time[1] + ":" + time[2][:4]
+
 def timeToSeconds(time):
     mm,ss = time.split(":")[0],time.split(":")[1]
     return (int(mm) * 60) + float(ss)
 
+
+def weightEquation(x):
+    return int(roundHundredths(math.sqrt(x/15) + 1) * 100)
+
 def calculateLinearRegression(xlist,ylist):
     if(len(xlist) < 3 or len(ylist) < 3):
-        return {"Equation": "NED"}
+        return {"Equation": "NED","Slope":0}
 
     weighted_xlist = []
     weighted_ylist = []
-    for day,rating in zip(xlist,ylist):
-        if day < 15:
-            for _ in range(1):
-                weighted_xlist.append(day)
-                weighted_ylist.append(rating)
-        elif day < 30:
-            for _ in range(2):
-                weighted_xlist.append(day)
-                weighted_ylist.append(rating)
-        elif day < 45:
-            for _ in range(2):
-                weighted_xlist.append(day)
-                weighted_ylist.append(rating)
-        elif day < 60:
-            for _ in range(3):
-                weighted_xlist.append(day)
-                weighted_ylist.append(rating)
-        elif day < 75:
-            for _ in range(3):
-                weighted_xlist.append(day)
-                weighted_ylist.append(rating)
+    weights = []
+    for x,y in zip(xlist,ylist):
+        weight = weightEquation(x)
+        weights.append(weight/100)
+        weighted_xlist.extend([x]*weight)
+        weighted_ylist.extend([y]*weight)
 
-    # Commented out = Weighted
-    #weighted_xlist = xlist
-    #weighted_ylist = ylist
+
+    if not weight_races:
+        weighted_xlist = xlist
+        weighted_ylist = ylist
 
     avgX = average(weighted_xlist)
     avgY = average(weighted_ylist)
@@ -106,7 +94,7 @@ def calculateLinearRegression(xlist,ylist):
 
     def regressionEquation(x):
         return slope * x + yint
-    return {"Function": regressionEquation,"Equation": f"y = {slope}x + {yint}","Slope":slope,"YInt":yint,"X":xlist,"Y":ylist}
+    return {"Function": regressionEquation,"Equation": f"y = {slope}x + {yint}","Slope":slope,"YInt":yint,"X":xlist,"Y":ylist,"Weights":weights}
 
 def generateToken(meetId):
     r = requests.get(f"https://www.athletic.net/api/v1/Meet/GetMeetData?meetId={meetId}&sport=xc")
@@ -293,7 +281,9 @@ for name in athlete_data.keys():
     meets = []
     for meet in athlete_data[name]["RatingData"]:
         if datetime.strptime(meet["Date"],"%d-%m-%Y") >= datetime.strptime(start_date,"%d-%m-%Y"):
-            meets.append(meet)
+            if (remove_weekdays and datetime.strptime(meet["Date"],"%d-%m-%Y").weekday() >= 4) or not remove_weekdays:
+                if not meet["Date"] in remove_dates:
+                    meets.append(meet)
 
     ratings = []
     times = []
@@ -328,5 +318,11 @@ for name in athlete_data.keys():
 # region
 
 
-predictMeet(205620,gender="M",excludeRunners=["Gregory Vogt","Ethan Murazewski"])
+predictMeet(205620,gender="M",excludeRunners=["Gregory Vogt","Ethan Muraszewski"])
+#print(athlete_data["Remi Flanz"]["RatingData"])
 # counties
+
+
+#print(athlete_data["Tyler Donovan"]["RatingData"]["RegressionData"])
+
+
